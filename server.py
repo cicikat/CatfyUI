@@ -4,6 +4,7 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import psutil
 import studio_agent
+from film_director import Director
 
 ROOT=Path(__file__).resolve().parent
 H3 = Path(os.environ.get('CATFYUI_H3_ROOT') or ROOT / 'engines' / 'FreeVideo-H3')
@@ -349,6 +350,11 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/style.css':return self.file(ROOT/'style.css')
             if path=='/agent.js':return self.file(ROOT/'agent.js')
             if path=='/agent.css':return self.file(ROOT/'agent.css')
+            if path=='/director.js':return self.file(ROOT/'director.js')
+            if path=='/api/films':return self.reply(director().list())
+            if path.startswith('/api/films/'):
+                pid=path.removeprefix('/api/films/')
+                return self.reply(director().state(pid, q.get('revision',[None])[0]))
             if path=='/api/agent':return self.reply(agent().state())
             if path=='/api/state':
                 with db() as c:items=[dict(r) for r in c.execute('SELECT * FROM jobs ORDER BY created DESC,id DESC LIMIT 1000')]
@@ -393,6 +399,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(asset(dest))
             if length>8*1024**2:raise ValueError('请求过大')
             data=json.loads(self.rfile.read(length) or '{}')
+            if path=='/api/films/start':return self.reply(director().start(data))
+            if path.startswith('/api/films/'):
+                pid,action=path.removeprefix('/api/films/').split('/')
+                return self.reply(director().action(pid,action,data))
             if path.startswith('/api/agent/'):
                 return self.reply(agent().action(path.rsplit('/',1)[-1],data))
             if path=='/api/settings':
@@ -451,9 +461,14 @@ class Handler(BaseHTTPRequestHandler):
 def agent():
     return studio_agent.Agent(sys.modules[__name__])
 
+def director():
+    return Director(sys.modules[__name__])
+
 def main():
     server=ThreadingHTTPServer(('127.0.0.1',PORT),Handler);initialize();threading.Thread(target=worker,daemon=True).start();print('AI 视频工作台 '+URL,flush=True)
     agent().initialize()
+    director().initialize()
+    threading.Thread(target=director().loop,daemon=True).start()
     threading.Thread(target=agent().loop,daemon=True).start()
     try:server.serve_forever()
     finally:stopped.set();server.server_close()
