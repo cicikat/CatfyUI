@@ -5,6 +5,8 @@
 /engines/
 /models/
 /vendor/
+/启动本机CatfyUI.cmd
+/本机工作台记录/
 /.venv/
 /.env*
 /machine.json
