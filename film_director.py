@@ -1,11 +1,13 @@
 """Persistent Director projects. State and queue writes share a SQLite transaction."""
 import copy
 import json
+import os
 import math
 import re
 import time
 import uuid
 
+import film_media
 from film_review import Review
 from film_output import Output
 from studio_agent import Agent, json_answer
@@ -210,6 +212,8 @@ class Director(Review, Output):
         if 'candidates' in changes:
             changes['candidates'] = integer(changes['candidates'], 1, 8)
         if not current and not imported:
+            if 'prompt' not in changes:
+                raise ValueError('新增镜头必须提供提示词。')
             changes.setdefault('candidates', 1)
         options = self.studio.validate(dict(source, **changes), require_ready=False)
         if set(self.asset_ids([options])) - set(project['permitted_assets']):
@@ -239,11 +243,12 @@ class Director(Review, Output):
             fresh = self.load(db, project['id'])
             self.guard(project, fresh)
             self.charge(fresh, 'calls')
-            if round_start:
+            if round_start and not fresh.get('round_open'):
                 self.charge(fresh, 'rounds')
+                fresh['round_open'] = True
             self.event(db, fresh, 'model_request', model=model, frames=evidence or [])
             self.save(db, fresh)
-        project.update(used=fresh['used'], event_seq=fresh['event_seq'])
+        project.update(used=fresh['used'], event_seq=fresh['event_seq'], round_open=fresh.get('round_open', False))
         return json_answer(provider.chat(model, SYSTEM + instruction, content))
 
     @staticmethod
@@ -317,6 +322,8 @@ class Director(Review, Output):
                 'decision_id', 'based_on_plan_revision', 'analysis', 'evidence', 'operations'}:
             raise ValueError('导演决策字段无效。')
         did = label(decision['decision_id'], 100)
+        if type(decision['based_on_plan_revision']) is not int:
+            raise ValueError('计划版本必须为整数。')
         if did in project['decisions']:
             if project['decisions'][did] != decision:
                 raise ValueError('此决策 ID 已用于其他变更。')
@@ -333,6 +340,8 @@ class Director(Review, Output):
         for item in evidence:
             if not isinstance(item, dict) or set(item) != {'shot_id', 'clip_id', 'time_sec'}:
                 raise ValueError('证据必须明确指向镜头、候选与时间。')
+            if not isinstance(item['shot_id'], str) or not isinstance(item['clip_id'], str):
+                raise ValueError('证据 ID 无效。')
             shot = project['shots'].get(item['shot_id'])
             review = shot and shot['reviews'].get(item['clip_id'])
             if not review or not any(abs(frame['time_sec'] - number(item['time_sec'], 0, 86400)) < .002
@@ -373,13 +382,15 @@ class Director(Review, Output):
             if any(shots[other]['options']['prompt'].strip().casefold() ==
                    proposed['options']['prompt'].strip().casefold() for other in order):
                 raise ValueError('新增镜头的提示词与现有镜头重复。')
-            self.charge(project, 'inserts')
+            if not human:
+                self.charge(project, 'inserts')
             shots[sid] = proposed
             order.insert(order.index(after) + 1 if after else 0, sid)
             return
         if sid not in order:
             raise ValueError('镜头不存在或已移除。')
-        if shot['locked'] and not human:
+        if not human and (shot['locked'] or (shot.get('human_selected') or shot.get('human_trim')) and
+                          action in {'revise_shot', 'remove_shot'}):
             raise ValueError('导演不可修改已锁定镜头。')
         if action == 'remove_shot':
             order.remove(sid)
@@ -406,7 +417,7 @@ class Director(Review, Output):
             row = db.execute('SELECT status FROM jobs WHERE id=?', (jid,)).fetchone() if jid in shot['jobs'] else None
             if not row or row['status'] != 'completed':
                 raise ValueError('候选必须属于当前镜头且技术生成完成。')
-            if not human and shot.get('human_selected'):
+            if not human and (shot.get('human_selected') or shot.get('human_trim')):
                 raise ValueError('导演不可覆盖人工选用的候选。')
             if not human and shot['reviews'].get(jid, {}).get('verdict') not in ('pass', 'usable_with_trim'):
                 raise ValueError('自动选片需要已审查的可用候选。')
@@ -417,7 +428,6 @@ class Director(Review, Output):
                 raise ValueError('导演不可覆盖人工裁切。')
             if not shot['selected']:
                 raise ValueError('请先选择候选。')
-            import film_media
             duration = film_media.probe(self.studio.FF, self.source(db, shot['selected']))['duration']
             start = number(op['in'], 0, duration)
             end = number(op['out'], start + .125, duration)
@@ -425,7 +435,7 @@ class Director(Review, Output):
         elif action == 'request_render':
             if not human:
                 raise ValueError('原参数重跑仅限人工或技术错误自动重试。')
-            shot['pending_render'] = True
+            shot.update(pending_render=True, selected='', trim=None, human_selected=False, human_trim=False)
 
     def clip_duration(self, shot, jid):
         return shot['reviews'].get(jid, {}).get('duration', shot['options']['seconds'])
@@ -436,7 +446,6 @@ class Director(Review, Output):
 
     def action(self, pid, action, data):
         if action == 'folder':
-            import os
             with self.studio.db() as db:
                 products = self.load(db, pid)['products']
                 output = products.get('final') or products.get('preview')
@@ -467,6 +476,8 @@ class Director(Review, Output):
             elif action == 'reject' and old == 'awaiting_approval' and p['pending']:
                 p.update(pending=None, status='needs_attention', error='已拒绝导演提议，可手动调整或出片。')
             elif action in {'edit', 'lock'} and p['revision'] and old != 'stopped':
+                if action == 'edit' and not isinstance(data.get('decision'), dict):
+                    raise ValueError('决策必须为 JSON 对象。')
                 if action == 'edit' and data['decision'].get('decision_id') in p['decisions']:
                     self.apply(db, p, data['decision'], human=True)
                     return {'ok': True}
@@ -495,10 +506,12 @@ class Director(Review, Output):
             p['epoch'] += 1
             p['next_run_at'] = time.time()
             details = dict(previous=old, actor='user')
+            if action == 'lock':
+                details.update(shot_id=data['shot_id'], locked=data['locked'])
             if action == 'edit':
                 details['decision'] = data['decision']
             if action == 'approve' and pending:
-                details.update(decision=pending, model=p['vision'] or p['model'])
+                details.update(decision=pending, model=p['model'])
             self.event(db, p, action, **details)
             self.save(db, p)
         return {'ok': True}
@@ -511,7 +524,7 @@ class Director(Review, Output):
                 db.execute('BEGIN IMMEDIATE')
                 self.guard_epoch(project, self.load(db, project['id']), status)
                 self.snapshot(db, project)
-                self.event(db, project, 'plan', model=project['model'])
+                self.event(db, project, 'plan', previous=status, model=project['model'])
                 self.save(db, project)
         elif status == 'dispatching':
             with self.studio.db() as db:

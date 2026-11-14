@@ -14,7 +14,8 @@ ARTIFACTS = {'preview.mp4', 'final.mp4', 'timeline.json', 'film-report.json', 'f
 class Output:
     def extra_action(self, db, project, action, data):
         if action == 'review' and project['status'] in {'needs_attention', 'completed'}:
-            project.update(status='generating', error='')
+            self.advance(project)
+            project['error'] = ''
             return
         if action != 'render' or project['status'] not in {
                 'needs_attention', 'completed', 'paused', 'awaiting_approval', 'blocked'}:
@@ -22,7 +23,8 @@ class Output:
         kind = data.get('kind')
         if kind not in ('preview', 'final'):
             raise ValueError('请选择预览或正式成片。')
-        if not project['order'] or any(not project['shots'][sid]['selected'] for sid in project['order']):
+        if not project['order'] or any(not project['shots'][sid]['selected'] or project['shots'][sid]['pending_render']
+                                       for sid in project['order']):
             raise ValueError('请先为每个镜头选用候选。')
         if project['used']['assemblies'] >= project['budgets']['assemblies']:
             raise ValueError('已达到合成预算。')

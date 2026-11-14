@@ -42,7 +42,7 @@ class Review:
                             'prompt 为内容失败时保持剧情和连续性的完整返修提示词；仅依据静帧，运动和声音不足则表达不确定。',
                             content, evidence)
         verdict = data.get('verdict')
-        if verdict not in VERDICTS - {'technical_failure'}:
+        if not isinstance(verdict, str) or verdict not in VERDICTS - {'technical_failure'}:
             raise ValueError('单镜审查结论无效。')
         index = data.get('frame')
         if type(index) is not int or not 1 <= index <= len(evidence):
@@ -141,7 +141,7 @@ class Review:
             project['status'] = 'dispatching'
         elif project['vision'] and (not needs_attention or any(
                 r.get('frames') for sid in project['order'] for r in project['shots'][sid]['reviews'].values())):
-            project.update(status='continuity_review', transition_reports=[], transition_cursor=0, final_context=None)
+            project.update(status='continuity_review', transition_reports=[], transition_cursor=0, final_context=None, round_open=False)
         elif needs_attention:
             project.update(status='needs_attention', error='有镜头缺少可用候选，请选片或修改镜头。')
         else:
@@ -252,7 +252,7 @@ class Review:
                         self.snapshot(db, project)
                         if project['status'] != 'needs_attention':
                             self.advance(project)
-                        self.event(db, project, 'directing', decision=decision, model=project['model'])
+                        self.event(db, project, 'directing', decision=decision, model=project['model'], previous=status)
                     else:
                         project.update(status='awaiting_approval', pending=decision)
                         self.event(db, project, 'approval', decision=decision, model=project['model'])

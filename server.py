@@ -65,7 +65,7 @@ def workflows():
 def default_asset_root():
     return str(ROOT / 'assets')
 def validate(raw,require_ready=True,asset_connection=None):
-    o={**DEFAULT,**raw}; models={m['id']:m for m in workflows()}
+    o={**DEFAULT,**raw}; o.pop('director_project',None); models={m['id']:m for m in workflows()}
     if o['workflow'] not in models:raise ValueError('未知工作流')
     if require_ready and not models[o['workflow']]['ready']:raise ValueError(models[o['workflow']]['detail'])
     o['prompt']=str(o['prompt']).strip()

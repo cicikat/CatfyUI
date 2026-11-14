@@ -4,6 +4,7 @@
     let project;
     let signature = '';
     let busy = false;
+    let refreshVersion = 0;
     const labels = {
         planning: '正在规划', awaiting_approval: '待批准', dispatching: '准备入队',
         generating: '等待候选', clip_review: '单镜审查', continuity_review: '导演复盘',
@@ -20,16 +21,18 @@
     const baseUrl = () => '/api/films/' + picker.value;
 
     async function refresh(force = false) {
+        const version = ++refreshVersion;
         const projects = await api('/api/films');
+        if (version !== refreshVersion) return;
         const selected = picker.value || projects[0]?.id;
         picker.innerHTML = projects.map(item =>
             `<option value="${item.id}">${esc(item.brief.slice(0, 40))} · ${labels[item.status]}</option>`).join('');
         if (!selected) return;
         picker.value = selected;
         const next = await api(baseUrl());
-        if (picker.value !== next.id) return;
+        if (version !== refreshVersion || picker.value !== next.id) return;
         const serialized = JSON.stringify(next);
-        if (!force && (serialized === signature || root.contains(document.activeElement))) return;
+        if (!force && (serialized === signature || root.contains(document.activeElement) || [...root.querySelectorAll('video')].some(video => !video.paused))) return;
         project = next;
         signature = serialized;
         render();
@@ -47,7 +50,11 @@
             !['stopped', 'completed'].includes(p.status) && button('cancel', '停止并取消项目任务'),
             ...renderActions(p)
         ].filter(Boolean).join('');
-        const open = new Set([...root.querySelectorAll('details[open][id]')].map(node => node.id));
+        const sameProject = root.dataset.project === p.id;
+        const open = new Set(sameProject ? [...root.querySelectorAll('details[open][id]')].map(node => node.id) : []);
+        const videos = new Map(sameProject ? [...root.querySelectorAll('video')].map(video =>
+            [video.getAttribute('src'), video]) : []);
+        root.dataset.project = p.id;
         root.innerHTML = `
             <div class="agent-run-head"><strong>${labels[p.status]} · 分镜 v${p.revision}</strong>
             <small>${esc(p.model)} · ${p.target} 秒目标</small></div>
@@ -74,6 +81,10 @@
                     ${esc(eventDescription(event))}</li>`).join('')}</ul></details>` : ''}
         `;
         root.querySelectorAll('details[id]').forEach(node => { if (open.has(node.id)) node.open = true; });
+        root.querySelectorAll('video').forEach(video => {
+            const existing = videos.get(video.getAttribute('src'));
+            if (existing) video.replaceWith(existing);
+        });
     }
 
     const bibleNames = {story: '剧情目标', beats: '情绪节拍', characters: '人物外观', setting: '时空和道具',
@@ -116,7 +127,7 @@
             <p class="agent-muted">${esc([shot.purpose, shot.camera, shot.relation].filter(Boolean).join(' · '))}</p>
             ${editable ? `<label>提示词 <textarea data-field="prompt" rows="2">${esc(o.prompt)}</textarea></label>
                 <div class="agent-controls">${button('prompt','保存提示词')}${button('lock',shot.locked ? '解锁' : '锁定')}
-                ${button('up','上移')}${button('down','下移')}${button('remove','移除')}</div>` :
+                ${button('up','上移')}${button('down','下移')}${button('remove','移除')}${button('rerender','重新生成此镜')}</div>` :
                 `<p class="agent-pre">${esc(o.prompt)}</p>`}
             ${candidates ? `<ul>${candidates}</ul>` : ''}
             ${editable && shot.selected ? trimFields(shot) : ''}
@@ -140,7 +151,7 @@
     }
 
     function renderActions(p) {
-        const ready = p.order.length && p.order.every(sid => p.shots[sid].selected);
+        const ready = p.order.length && p.order.every(sid => p.shots[sid].selected && !p.shots[sid].pending_render);
         const idle = ['needs_attention','completed','paused','awaiting_approval','blocked'].includes(p.status);
         return [
             ready && idle && button('preview','合成预览'),
@@ -228,6 +239,7 @@
                 prompt: () => ({type:'revise_shot', shot_id:sid, shot:{prompt:card.querySelector('[data-field="prompt"]').value}}),
                 up: () => ({type:'reorder_shot', shot_id:sid, after_shot_id:order[index-2] || null}),
                 down: () => ({type:'reorder_shot', shot_id:sid, after_shot_id:order[index+1]}),
+                rerender: () => ({type:'request_render', shot_id:sid}),
                 remove: () => ({type:'remove_shot', shot_id:sid}),
                 candidate: () => ({type:'select_candidate', shot_id:sid, clip_id:control.dataset.clip}),
                 trim: () => ({type:'set_trim', shot_id:sid, in:card.querySelector('[data-field=in]').value,
