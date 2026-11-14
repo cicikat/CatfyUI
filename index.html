@@ -1,0 +1,61 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FRAME · AI 视频工作台</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/agent.css"></head><body>
+<aside class="sidebar"><a class="brand" href="/" aria-label="FRAME 首页"><b>F</b><span>FRAME<small>LOCAL VIDEO STUDIO</small></span></a><div class="workspace"><span class="dot"></span>本地创作空间 <small>01</small></div><nav><button class="nav active" data-page="create">✦ <span>视频生成</span></button><button class="nav" data-page="gallery">▦ <span>作品画廊</span><em id="galleryCount">0</em></button><button class="nav" data-page="batch">☷ <span>批量分镜</span></button><button class="nav" data-page="assets">▧ <span>参考图资产库</span></button><button class="nav" data-page="agent">◎ <span>Agent 模式</span></button></nav><div class="sidebar-bottom"><div class="local-badge"><span class="dot"></span> 本地引擎 · 素材留在电脑</div><p>从一个画面，开始一段故事。</p><button id="shutdown" class="subtle">关闭工作台服务 ↗</button><small>FRAME / WORKBENCH 01</small></div></aside>
+<div class="shell"><header><div class="crumb">工作空间 <span>/</span> <strong id="pageName">视频生成</strong></div><div class="header-right"><span id="saveState">参数已自动保存</span><span class="engine-pill"><i class="dot"></i><span id="engineState">连接引擎</span></span></div></header>
+<main><section class="page" id="page-create"><div class="page-heading"><div><div class="eyebrow">CREATE A NEW SHOT</div><h1>让想象，开始运动<span>。</span></h1><p>描述镜头，放入参考画面，剩下的交给本地引擎。</p></div><div class="step-mark">01 <span>/ CREATE</span></div></div>
+<div class="create-layout"><div class="composer"><div class="section-label"><span>01</span> 选择生成工作流 <small id="workflowNote"></small></div><div id="modelCards" class="model-cards"></div><div id="modelWarning" class="warning hidden"></div>
+<div class="section-label section-space"><span>02</span> 描述你的镜头 <small id="charCount">0 字</small></div><div class="prompt-wrap"><textarea id="prompt" placeholder="例如：清晨的地铁站，阳光从高窗斜射进来。一名女子站在画面左侧，缓缓回头，镜头沿轨道轻轻向前推进……"></textarea><div class="prompt-footer"><span>画面 · 主体 · 动作 · 镜头 · 声音</span><button id="clearPrompt" class="subtle">清空</button></div></div>
+<div class="section-label section-space"><span>03</span> 参考画面 <div class="segmented"><button id="modeFrames" class="selected">首尾帧</button><button id="modeReferences">多图参考</button></div></div><div id="frames" class="frame-grid"><div class="drop-zone" data-target="first" tabindex="0" role="button" aria-label="选择首帧"><div class="frame-content" id="firstPreview"><span class="frame-icon">＋</span><b>添加首帧</b><small>拖入图片，或点击选择</small></div><div class="frame-actions"><button data-library="first">从资产库选择 ↗</button><button data-clear="first" aria-label="清除首帧">清除</button></div></div><div class="drop-zone" data-target="last" tabindex="0" role="button" aria-label="选择尾帧"><div class="frame-content" id="lastPreview"><span class="frame-icon">＋</span><b>添加尾帧</b><small>可选 · 指定镜头结束的画面</small></div><div class="frame-actions"><button data-library="last">从资产库选择 ↗</button><button data-clear="last" aria-label="清除尾帧">清除</button></div></div></div><div id="references" class="hidden"><div id="refList" class="ref-list"></div><div class="ref-buttons"><button id="addRef">＋ 上传参考图</button><button data-library="references">▧ 从资产库选择</button><span>最多 8 张 · 与首尾帧模式独立</span></div></div>
+<details class="advanced"><summary>负面提示词与更多参数 <span>⌄</span></summary><label>负面提示词<textarea id="negative" rows="2"></textarea></label><div class="param-grid"><label>随机种子<input id="seed" type="number" min="-1" max="9007199254740983" value="-1"><small>-1 随机；多候选自动递增</small></label><label>Wan 采样步数<input id="steps" type="number" value="20" min="1" max="50"></label><label>Wan CFG<input id="cfg" type="number" value="5" min="0" max="20" step="0.5"></label></div></details>
+<div class="generation-options"><label>视频时长<select id="seconds"><option value="2">2 秒</option><option value="3" selected>3 秒</option><option value="5">5 秒</option><option value="8">8 秒</option><option value="10">10 秒</option><option value="15">15 秒</option></select></label><label>画面尺寸<select id="resolution"><option value="1024x576">横屏 · 1024 × 576</option><option value="768x448">快速 · 768 × 448</option><option value="576x1024">竖屏 · 576 × 1024</option><option value="1536x864">高清 · 1536 × 864</option></select></label><label>候选数量<select id="candidates"><option value="1">1 条</option><option value="2" selected>2 条</option><option value="4">4 条</option><option value="8">8 条</option></select></label></div><div class="submit-line"><span>顺序运行 · 原始 MP4 自动保存<br><small>模型会将时长向上对齐到合法帧数</small></span><button class="primary" id="generate" disabled>生成视频 <span>↗</span></button></div></div>
+<aside class="queue-panel"><div class="queue-heading"><h2>任务队列 <em id="queueCount">0</em></h2><button id="pause" class="subtle">暂停队列</button></div><div id="busy" class="queue-info">准备好，随时开始。</div><div id="queueList"></div><div class="queue-foot">依次生成，避免显存争用。<br>技术生成成功后，仍需审片。</div></aside></div>
+<div class="recent-heading"><h2>最近生成 <small>RECENT OUTPUTS</small></h2><button class="subtle" data-go="gallery">查看全部 ↗</button></div><div id="recentGallery" class="gallery-grid"></div></section>
+<section class="page hidden" id="page-gallery"><div class="page-heading"><div><div class="eyebrow">YOUR CREATIVE ARCHIVE</div><h1>作品画廊<span>。</span></h1><p>每个镜头都保存了生成参数。选择两条视频，放在一起比较。</p></div><button id="compare" class="primary">对比选中视频 <span id="compareCount">0 / 2</span></button></div><div class="filter-line"><input id="gallerySearch" placeholder="搜索标题或提示词…"><select id="galleryModel"><option value="">全部工作流</option><option value="h3-light">H3 Light</option><option value="h3-high">H3 High</option><option value="h3-max">H3 Max</option><option value="wan22">Wan 2.2</option></select><span id="galleryTotal"></span></div><div id="fullGallery" class="gallery-grid"></div></section>
+<section class="page hidden" id="page-batch"><div class="page-heading"><div><div class="eyebrow">FROM SCRIPT TO SCREEN</div><h1>把故事，批量展开<span>。</span></h1><p>导入 CSV 或 Excel，一条分镜生成两条候选。先预览、校验，再提交队列。</p></div><a class="secondary" href="/template.csv">↓ 下载 CSV 模板</a></div><div class="batch-drop" id="batchDrop" role="button" tabindex="0"><div class="big-icon">☷</div><h2>将分镜表拖到这里</h2><p>或点击选择 CSV / XLSX 文件</p><small>支持：镜号、提示词、首帧、尾帧、时长、分辨率、工作流、种子</small></div><div class="batch-note">未填写的参数沿用当前生成界面。每镜固定 2 条候选；首尾帧可填绝对路径或资产库文件夹内的相对路径。工作流填写 h3-light / h3-high / h3-max / wan22。</div><div id="batchPreview"></div></section>
+<section class="page hidden" id="page-assets"><div class="page-heading"><div><div class="eyebrow">VISUAL REFERENCES</div><h1>你的灵感资产库<span>。</span></h1><p>从电脑上的素材文件夹读取图片，或直接上传。点击图片可送入生成界面。</p></div><button id="assetUpload" class="primary">＋ 上传图片</button></div><div class="library-bar"><input id="assetRoot" placeholder="素材文件夹路径，如 E:\AI\素材"><button id="scan" class="secondary">扫描文件夹</button><button id="folderUpload" class="secondary">选择文件夹上传</button></div><div class="filter-line"><input id="assetSearch" placeholder="搜索图片文件名…"><span id="assetCount"></span></div><div id="assetGrid" class="asset-grid"></div></section>
+
+<section class="page hidden" id="page-agent">
+    <div class="page-heading">
+        <div><h1>Agent 模式</h1><p>用自然语言规划分镜、提交本机生成，并定时检查结果。</p></div>
+    </div>
+    <div class="agent-grid">
+        <div class="composer agent-form">
+            <h2>模型连接</h2>
+            <label>API 地址<input id="agentUrl" placeholder="https://服务商/v1" autocomplete="off"></label>
+            <label>API Key<input id="agentKey" type="password" autocomplete="new-password"></label>
+            <label class="agent-check"><input type="checkbox" id="agentForget"> 清除已保存的 Key</label>
+            <label>文本模型<input id="agentModel" list="agentModels" placeholder="自动发现或手填模型 ID"></label>
+            <label>视觉模型（可选）<input id="agentVision" list="agentModels" placeholder="选择支持图片输入的模型"></label>
+            <datalist id="agentModels"></datalist>
+            <div class="agent-controls">
+                <button id="agent-discover" class="secondary">发现并验证文本模型</button>
+                <button id="agent-connect" class="secondary">测试并保存</button>
+            </div>
+            <p id="agentConnection" class="agent-muted" role="status">支持 OpenAI 兼容的 Models 和 Chat Completions 接口。</p>
+        </div>
+        <div class="composer agent-form">
+            <h2>生成指令</h2>
+            <label>任务要求<textarea id="agentInstruction" rows="6" placeholder="用当前首帧做 3 秒 H3 Light 空镜，两条候选。保持机位，只有水面轻动。"></textarea></label>
+            <label>分镜表（可选）<input id="agentFile" type="file" accept=".csv,.xlsx"></label>
+            <p class="agent-muted">默认沿用「视频生成」页的参数与参考图。上传分镜表时，Agent 逐行优化提示词并保留镜号、参数和绑定参考图。</p>
+            <div class="agent-numbers">
+                <label>巡检间隔（分钟）<input id="agentInterval" type="number" min="0.1" max="1440" step="0.1" value="5"></label>
+                <label>总生成上限<input id="agentBudget" type="number" min="1" max="500" value="12"></label>
+                <label>每条重试上限<input id="agentRetries" type="number" min="0" max="5" value="1"></label>
+            </div>
+            <label class="agent-check"><input id="agentAuto" type="checkbox"> 计划验证后自动入队</label>
+            <label class="agent-check"><input id="agentLibrary" type="checkbox"> 允许模型读取资产库文件名以选择参考图</label>
+            <label class="agent-check"><input id="agentReview" type="checkbox"> 将生成抽帧发送到已配置 API，自动审片和返修</label>
+            <label>候选通过后升档<select id="agentPromotion" disabled>
+                <option value="">保留候选</option><option value="h3-high">生成 H3 High</option><option value="h3-max">生成 H3 Max</option>
+            </select></label>
+            <button id="agentStart" class="primary">启动 Agent</button>
+        </div>
+    </div>
+    <div class="recent-heading"><h2>Agent 运行记录</h2><small>后台随本机服务运行</small></div>
+    <div id="agentRuns"></div>
+</section>
+</main><footer>FRAME <span>本地创作，自由掌镜。</span><span>保存位置：工作台 / jobs / 任务编号</span></footer></div>
+<input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/bmp" hidden><input type="file" id="multiInput" accept="image/*" multiple hidden><input type="file" id="folderInput" webkitdirectory multiple hidden><input type="file" id="batchInput" accept=".csv,.xlsx" hidden>
+<dialog id="libraryDialog"><div class="modal-head"><div><h2>选择参考图</h2><p id="libraryTarget"></p></div><button class="close" data-close="libraryDialog">×</button></div><input id="librarySearch" placeholder="搜索素材文件名…"><div id="libraryGrid" class="asset-grid"></div><p>更多素材可在「参考图资产库」中扫描文件夹。</p></dialog>
+<dialog id="videoDialog"><div class="modal-head"><h2 id="videoTitle">视频预览</h2><button class="close" data-close="videoDialog">×</button></div><div id="videoBody"></div></dialog>
+<dialog id="logDialog"><div class="modal-head"><h2>任务详情</h2><button class="close" data-close="logDialog">×</button></div><pre id="logBody"></pre></dialog><div id="toast" role="status"></div><script src="/app.js"></script><script src="/agent.js"></script></body></html>

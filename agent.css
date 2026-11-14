@@ -1,0 +1,18 @@
+.agent-grid { display:grid; grid-template-columns: minmax(260px, .8fr) minmax(340px, 1.2fr); gap:20px; align-items:start }
+.agent-form { display:grid; gap:14px }
+.agent-form h2 { margin:0 0 4px; font-size:18px }
+.agent-form label { display:grid; gap:6px; min-width:0 }
+.agent-form input:not([type=checkbox]), .agent-form textarea, .agent-form select { width:100%; min-width:0 }
+.agent-form textarea { resize:vertical }
+.agent-form .agent-check { display:flex; align-items:center; gap:8px }
+.agent-numbers { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px }
+.agent-controls { display:flex; flex-wrap:wrap; gap:8px }
+.agent-muted { color:#acadb6; font-size:13px; line-height:1.6; margin:0 }
+.agent-run { margin-bottom:12px; display:grid; gap:10px }
+.agent-run-head { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap }
+.agent-run details { border-top:1px solid #30323a; padding:10px 0 0 }
+.agent-run summary { cursor:pointer }
+.agent-run ul { padding-inline-start:22px }
+.agent-run li { margin:6px 0; overflow-wrap:anywhere }
+.agent-pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:0 }
+@media (max-width:1000px) { .agent-grid { grid-template-columns:minmax(0,1fr) } }
