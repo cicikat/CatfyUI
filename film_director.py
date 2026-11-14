@@ -7,6 +7,7 @@ import time
 import uuid
 from pathlib import Path
 
+from film_review import Review
 from studio_agent import Agent, json_answer
 
 
@@ -61,7 +62,7 @@ def label(value, max_length=2000):
     return value.strip()
 
 
-class Director:
+class Director(Review):
     def __init__(self, studio):
         self.studio = studio
         self.legacy = Agent(studio)
@@ -345,6 +346,7 @@ class Director:
             raise ValueError('导演操作参数无效。')
         if action == 'mark_human_review':
             project['status'] = 'needs_attention'
+            project['error'] = '导演请求人工确认。'
             return
         sid = op['shot_id']
         if not isinstance(sid, str) or not re.fullmatch(r'S[A-Z0-9]{1,23}', sid):
@@ -394,11 +396,12 @@ class Director:
             row = db.execute('SELECT status FROM jobs WHERE id=?', (jid,)).fetchone() if jid in shot['jobs'] else None
             if not row or row['status'] != 'completed':
                 raise ValueError('候选必须属于当前镜头且技术生成完成。')
-            if not human and (shot['human_selected'] if 'human_selected' in shot else False):
+            if not human and shot.get('human_selected'):
                 raise ValueError('导演不可覆盖人工选用的候选。')
             if not human and shot['reviews'].get(jid, {}).get('verdict') not in ('pass', 'usable_with_trim'):
                 raise ValueError('自动选片需要已审查的可用候选。')
-            shot.update(selected=jid, trim=None, pending_render=False, human_selected=human, human_trim=False)
+            shot.update(selected=jid, trim=shot['reviews'].get(jid, {}).get('trim'),
+                        pending_render=False, human_selected=human, human_trim=False)
         elif action == 'set_trim':
             if shot.get('human_trim') and not human:
                 raise ValueError('导演不可覆盖人工裁切。')
@@ -509,9 +512,6 @@ class Director:
                 self.save(db, project)
         else:
             self.production_tick(project)
-
-    def production_tick(self, project):
-        raise Attention('分镜已入队，后续制作阶段待接入。')
 
     def guard_epoch(self, project, fresh, previous):
         if (project['epoch'], project['revision'], previous) != (fresh['epoch'], fresh['revision'], fresh['status']):

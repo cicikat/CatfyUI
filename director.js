@@ -60,6 +60,9 @@
                 <ul>${p.pending.operations.map(op => `<li>${describeOperation(op)}</li>`).join('')}</ul></details>` : ''}
             <div class="agent-controls">${actions}</div>
             ${renderProducts(p)}
+            ${p.transition_reports?.length ? `<details id="filmContinuity"><summary>相邻镜头复盘</summary>
+                <ul>${p.transition_reports.map(r => `<li>${r.shots.join(' → ')} · ${esc(r.reason)}</li>`).join('')}</ul>
+                </details>` : ''}
             ${p.revision ? `<details id="filmBible"><summary>故事设定</summary>
                 <dl>${Object.entries(p.story_bible).map(([key, value]) => `<dt>${bibleNames[key]}</dt><dd>${esc(value)}</dd>`).join('')}</dl>
                 </details>` : ''}
@@ -121,7 +124,10 @@
     }
 
     function reviewDescription(review) {
-        return review.reason;
+        const verdicts = {technical_failure:'技术失败', visible_quality_failure:'可见质量问题',
+            narrative_mismatch:'叙事不符', usable_with_trim:'可裁切使用', pass:'静帧审查通过', uncertain:'待确认'};
+        return [verdicts[review.verdict], review.reason, review.trim && `建议裁切 ${review.trim.join('–')} 秒`]
+            .filter(Boolean).join(' · ');
     }
     function trimFields() { return ''; }
     function renderActions() { return []; }
