@@ -16,3 +16,9 @@
 .agent-run li { margin:6px 0; overflow-wrap:anywhere }
 .agent-pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:0 }
 @media (max-width:1000px) { .agent-grid { grid-template-columns:minmax(0,1fr) } }
+
+#filmProject video { display:block; width:100%; margin:8px 0; max-height:420px; background:#111 }
+#filmProject .film-trim { align-items:end }
+#filmProject .film-trim input { width:92px }
+#filmProject dd { margin:0 0 8px; overflow-wrap:anywhere }
+#filmRevisionData { max-height:360px; overflow:auto }

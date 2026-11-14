@@ -129,9 +129,46 @@
         return [verdicts[review.verdict], review.reason, review.trim && `建议裁切 ${review.trim.join('–')} 秒`]
             .filter(Boolean).join(' · ');
     }
-    function trimFields() { return ''; }
-    function renderActions() { return []; }
-    function renderProducts() { return ''; }
+    function trimFields(shot) {
+        const duration = shot.reviews[shot.selected]?.duration || shot.options.seconds;
+        const [start, end] = shot.trim || [0, Math.min(duration, shot.options.seconds)];
+        return `<div class="agent-controls film-trim">
+            <label>入点（秒） <input type="number" min="0" step="0.001" data-field="in" value="${start}"></label>
+            <label>出点（秒） <input type="number" min="0" step="0.001" data-field="out" value="${end}"></label>
+            ${button('trim','保存裁切')}
+            </div>`;
+    }
+
+    function renderActions(p) {
+        const ready = p.order.length && p.order.every(sid => p.shots[sid].selected);
+        const idle = ['needs_attention','completed','paused','awaiting_approval','blocked'].includes(p.status);
+        return [
+            ready && idle && button('preview','合成预览'),
+            ready && idle && button('final','重新出片'),
+            p.revision > 0 && ['needs_attention','completed'].includes(p.status) && button('review','继续制作'),
+            Object.keys(p.products).length > 0 && button('folder','打开产物文件夹')
+        ];
+    }
+
+    function renderProducts(p) {
+        return ['final', 'preview'].map(kind => {
+            const output = p.products[kind];
+            if (!output) return '';
+            const prefix = '/media/films/' + p.id + '/' + kind + '/';
+            const verdict = {pending:'待审查', pass:'静帧通过', issue:'发现问题', uncertain:'待人工确认'};
+            return `<details id="filmProduct${kind}" ${kind === 'final' ? 'open' : ''}>
+                <summary>${kind === 'final' ? '正式成片' : '预览'} · 分镜 v${output.revision}${output.revision !== p.revision ? '（历史）' : ''}</summary>
+                <p class="agent-muted">技术检查 ${output.technical.status === 'passed' ? '通过' : '失败'} ·
+                    内容审查 ${verdict[output.content.verdict]} · ${esc(output.content.reason)}</p>
+                <video controls preload="none" src="${prefix}${kind}.mp4?v=${output.id}"></video>
+                <div class="agent-controls">${link(prefix + kind + '.mp4?download=1','下载 MP4')}
+                    ${link(prefix + 'timeline.json?download=1','时间线')}
+                    ${link(prefix + 'film-report.md?download=1','审查报告')}
+                    ${link(baseUrl() + '/package','项目包')}
+                    ${link(baseUrl() + '/package?media=1','项目包（含剪辑素材）')}</div>
+                </details>`;
+        }).join('');
+    }
 
     async function perform(control, operation) {
         if (busy) return;
@@ -177,6 +214,7 @@
         if (!control || !project || picker.value !== project.id) return;
         perform(control, async () => {
             const action = control.dataset.filmAction;
+            if (['preview', 'final'].includes(action)) return api(baseUrl() + '/render', {kind:action});
             if (action === 'cancel') return api(baseUrl() + '/stop', {cancel_jobs:true});
             const card = control.closest('[data-shot]');
             const sid = card?.dataset.shot;
@@ -192,7 +230,8 @@
                 down: () => ({type:'reorder_shot', shot_id:sid, after_shot_id:order[index+1]}),
                 remove: () => ({type:'remove_shot', shot_id:sid}),
                 candidate: () => ({type:'select_candidate', shot_id:sid, clip_id:control.dataset.clip}),
-                ...extraOperations(card, sid)
+                trim: () => ({type:'set_trim', shot_id:sid, in:card.querySelector('[data-field=in]').value,
+                    out:card.querySelector('[data-field=out]').value})
             };
             if (operations[action]) return api(baseUrl() + '/edit', {
                 revision:project.revision, decision:{decision_id:crypto.randomUUID(), based_on_plan_revision:project.revision,
@@ -201,7 +240,6 @@
             await api(baseUrl() + '/' + action, {});
         });
     };
-    function extraOperations() { return {}; }
     document.querySelector('[data-page="director"]').addEventListener('click', () =>
         refresh(true).catch(error => toast(error.message, true)));
     setInterval(() => { if (page === 'director' && !busy) refresh().catch(() => {}); }, 3000);

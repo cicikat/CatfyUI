@@ -2,17 +2,18 @@
 import hashlib
 import json
 import math
+import re
 import subprocess
 from pathlib import Path
 
 
-def ff(command, *arguments, timeout=120):
+def ff(command, *arguments, timeout=120, stderr=False):
     result = subprocess.run([str(command), *map(str, arguments)], capture_output=True, timeout=timeout,
                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     if result.returncode:
         message = result.stderr.decode('utf-8', 'replace').strip()[-700:]
         raise ValueError(f'{Path(command).stem} 失败：{message}')
-    return result.stdout
+    return result.stderr if stderr else result.stdout
 
 
 def probe(encoder, path):
@@ -48,3 +49,9 @@ def frames(encoder, path, times):
 def sample_times(duration):
     last = max(0, duration - .125)
     return sorted({round(last * portion, 6) for portion in (0, .25, .5, .75, 1)})
+
+def black_intervals(encoder, path):
+    log = ff(encoder, '-hide_banner', '-nostats', '-i', path, '-an', '-vf', 'blackdetect=d=0.5',
+             '-f', 'null', '-', stderr=True, timeout=600)
+    return [dict(start=float(start), end=float(end)) for start, end in
+            re.findall(rb'black_start:([0-9.]+) black_end:([0-9.]+)', log)]

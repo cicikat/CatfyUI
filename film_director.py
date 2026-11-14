@@ -5,9 +5,9 @@ import math
 import re
 import time
 import uuid
-from pathlib import Path
 
 from film_review import Review
+from film_output import Output
 from studio_agent import Agent, json_answer
 
 
@@ -62,7 +62,7 @@ def label(value, max_length=2000):
     return value.strip()
 
 
-class Director(Review):
+class Director(Review, Output):
     def __init__(self, studio):
         self.studio = studio
         self.legacy = Agent(studio)
@@ -82,6 +82,15 @@ class Director(Review):
                     PRIMARY KEY(project_id, revision)
                 );
             """)
+
+    def recover_jobs(self):
+        with self.studio.db() as db:
+            for row in db.execute("SELECT id,options FROM jobs WHERE status='interrupted' AND cancel=0"):
+                jid = row['id']
+                options = json.loads(row['options'])
+                receipt = self.studio.ROOT / 'jobs' / jid / 'comfy-prompt.json'
+                if options.get('director_project') and options['workflow'] == 'wan22' and receipt.is_file():
+                    db.execute("UPDATE jobs SET status='queued',stage='恢复跟踪原 Comfy 任务' WHERE id=?", (jid,))
 
     def folder(self, pid):
         if not isinstance(pid, str) or not re.fullmatch(r'[a-f0-9]{32}', pid):
@@ -294,6 +303,7 @@ class Director(Review):
             if not shot['pending_render']:
                 continue
             options = self.studio.validate(shot['options'], asset_connection=db)
+            options['director_project'] = project['id']
             self.charge(project, 'generations', options['candidates'])
             ids = self.studio.enqueue([options], connection=db)
             shot['jobs'].extend(ids)
@@ -407,7 +417,8 @@ class Director(Review):
                 raise ValueError('导演不可覆盖人工裁切。')
             if not shot['selected']:
                 raise ValueError('请先选择候选。')
-            duration = self.clip_duration(shot, shot['selected'])
+            import film_media
+            duration = film_media.probe(self.studio.FF, self.source(db, shot['selected']))['duration']
             start = number(op['in'], 0, duration)
             end = number(op['out'], start + .125, duration)
             shot.update(trim=[start, end], human_trim=human)
@@ -427,8 +438,9 @@ class Director(Review):
         if action == 'folder':
             import os
             with self.studio.db() as db:
-                self.load(db, pid)
-            os.startfile(str(self.folder(pid)))
+                products = self.load(db, pid)['products']
+                output = products.get('final') or products.get('preview')
+            os.startfile(str(self.folder(pid) / output['id'] if output else self.folder(pid)))
             return {'ok': True}
         with self.studio.db() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -490,9 +502,6 @@ class Director(Review):
             self.event(db, p, action, **details)
             self.save(db, p)
         return {'ok': True}
-
-    def extra_action(self, db, project, action, data):
-        raise ValueError('当前状态无法执行此操作。')
 
     def tick(self, project):
         status = project['status']

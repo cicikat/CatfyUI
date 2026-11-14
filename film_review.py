@@ -258,7 +258,8 @@ class Review:
                         self.event(db, project, 'approval', decision=decision, model=project['model'])
             else:
                 unresolved = (verdict == 'uncertain' or any(r['verdict'] != 'pass' for r in project['transition_reports']))
-                project['structure'] = dict(verdict=verdict, reason=data['reason'], unresolved=unresolved)
+                project['structure'] = dict(verdict=verdict, reason=data['reason'], unresolved=unresolved,
+                                            revision=project['revision'])
                 if project.get('final_context'):
                     project.update(status='needs_attention', error='成片审查问题仍待人工确认。')
                 elif all(project['shots'][sid]['selected'] for sid in project['order']):
@@ -266,9 +267,6 @@ class Review:
                 else:
                     project.update(status='needs_attention', error='部分镜头缺少可用候选。' + data['reason'])
             self.save(db, project)
-
-    def ready_to_assemble(self, project):
-        project.update(status='assembling', output_kind='final')
 
     def production_tick(self, project):
         status = project['status']
@@ -289,8 +287,3 @@ class Review:
                 else:
                     self.choose_candidates(db, project)
             self.save(db, project)
-
-    def output_tick(self, project):
-        from film_director import Attention
-        raise Attention('已选片，合成阶段待接入。')
-
