@@ -26,3 +26,5 @@ python -m venv .venv
 可将已有 H3 和 Wan 工作流分别放入本机的 `workflows/h3-source.json` 与 `workflows/wan-source.json`。程序也会尝试从引擎目录复制已知模板。Wan 适配基于 `wan22_5b_i2v_template.json` 的节点和模型文件名，其他图需要调整适配代码。缺少模型、工作流或 FFmpeg 时，页面会显示未就绪。
 
 仓库提供应用源码与依赖列表。本机设置、工作流 JSON、模型权重、API Key、数据库、素材、产物和日志均保存在部署机器上。Agent 的 Key 由当前 Windows 用户加密。详见 [Agent 使用说明](Agent使用说明.md)。
+
+导演工作台的使用、数据迁移与离线验收见 [Director 使用说明](Director使用说明.md)。

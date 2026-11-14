@@ -1,5 +1,5 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FRAME · AI 视频工作台</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/agent.css"></head><body>
-<aside class="sidebar"><a class="brand" href="/" aria-label="FRAME 首页"><b>F</b><span>FRAME<small>LOCAL VIDEO STUDIO</small></span></a><div class="workspace"><span class="dot"></span>本地创作空间 <small>01</small></div><nav><button class="nav active" data-page="create">✦ <span>视频生成</span></button><button class="nav" data-page="gallery">▦ <span>作品画廊</span><em id="galleryCount">0</em></button><button class="nav" data-page="batch">☷ <span>批量分镜</span></button><button class="nav" data-page="assets">▧ <span>参考图资产库</span></button><button class="nav" data-page="agent">◎ <span>Agent 模式</span></button></nav><div class="sidebar-bottom"><div class="local-badge"><span class="dot"></span> 本地引擎 · 素材留在电脑</div><p>从一个画面，开始一段故事。</p><button id="shutdown" class="subtle">关闭工作台服务 ↗</button><small>FRAME / WORKBENCH 01</small></div></aside>
+<aside class="sidebar"><a class="brand" href="/" aria-label="FRAME 首页"><b>F</b><span>FRAME<small>LOCAL VIDEO STUDIO</small></span></a><div class="workspace"><span class="dot"></span>本地创作空间 <small>01</small></div><nav><button class="nav active" data-page="create">✦ <span>视频生成</span></button><button class="nav" data-page="gallery">▦ <span>作品画廊</span><em id="galleryCount">0</em></button><button class="nav" data-page="batch">☷ <span>批量分镜</span></button><button class="nav" data-page="assets">▧ <span>参考图资产库</span></button><button class="nav" data-page="agent">◎ <span>Agent 模式</span></button><button class="nav" data-page="director">◈ <span>导演工作台</span></button></nav><div class="sidebar-bottom"><div class="local-badge"><span class="dot"></span> 本地引擎 · 素材留在电脑</div><p>从一个画面，开始一段故事。</p><button id="shutdown" class="subtle">关闭工作台服务 ↗</button><small>FRAME / WORKBENCH 01</small></div></aside>
 <div class="shell"><header><div class="crumb">工作空间 <span>/</span> <strong id="pageName">视频生成</strong></div><div class="header-right"><span id="saveState">参数已自动保存</span><span class="engine-pill"><i class="dot"></i><span id="engineState">连接引擎</span></span></div></header>
 <main><section class="page" id="page-create"><div class="page-heading"><div><div class="eyebrow">CREATE A NEW SHOT</div><h1>让想象，开始运动<span>。</span></h1><p>描述镜头，放入参考画面，剩下的交给本地引擎。</p></div><div class="step-mark">01 <span>/ CREATE</span></div></div>
 <div class="create-layout"><div class="composer"><div class="section-label"><span>01</span> 选择生成工作流 <small id="workflowNote"></small></div><div id="modelCards" class="model-cards"></div><div id="modelWarning" class="warning hidden"></div>
@@ -54,8 +54,35 @@
     <div class="recent-heading"><h2>Agent 运行记录</h2><small>后台随本机服务运行</small></div>
     <div id="agentRuns"></div>
 </section>
+<section class="page hidden" id="page-director">
+    <div class="page-heading"><div><h1>导演工作台</h1><p>从创作要求到分镜、审片和成片。</p></div></div>
+    <div class="agent-grid">
+        <div class="composer agent-form" id="filmSetup">
+            <h2>新项目</h2>
+            <label>创作要求 <textarea id="filmBrief" rows="5" placeholder="写下剧情、风格和必须保留的画面"></textarea></label>
+            <label>目标片长（秒） <input id="filmTarget" type="number" min="1" max="7500" value="30"></label>
+            <label>分镜表（可选） <input id="filmFile" type="file" accept=".csv,.xlsx"></label>
+            <p class="agent-muted">模型在「Agent 模式」配置。参考图和画幅沿用「视频生成」页。</p>
+            <label class="agent-check"><input id="filmAuto" type="checkbox"> 自主执行（关闭时先审批计划和变更）</label>
+            <label class="agent-check"><input id="filmVision" type="checkbox"> 视觉审片（向已配置的视觉 API 发送视频抽帧）</label>
+            <details><summary>预算</summary><div class="agent-numbers">
+                <label>生成次数 <input type="number" data-budget="generations" min="1" max="500" value="12"></label>
+                <label>复盘轮数 <input type="number" data-budget="rounds" min="0" max="50" value="4"></label>
+                <label>新增镜头 <input type="number" data-budget="inserts" min="0" max="100" value="3"></label>
+                <label>单镜返修 <input type="number" data-budget="revisions" min="0" max="10" value="2"></label>
+                <label>模型调用 <input type="number" data-budget="calls" min="1" max="1000" value="40"></label>
+                <label>合成次数 <input type="number" data-budget="assemblies" min="1" max="50" value="5"></label>
+            </div></details>
+            <button class="primary" id="filmStart">创建导演项目</button>
+        </div>
+        <div class="composer agent-form">
+            <label>当前项目 <select id="filmPicker"></select></label>
+            <div class="agent-run" id="filmProject"><p class="agent-muted">创建项目后在此查看制作进度。</p></div>
+        </div>
+    </div>
+</section>
 </main><footer>FRAME <span>本地创作，自由掌镜。</span><span>保存位置：工作台 / jobs / 任务编号</span></footer></div>
 <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/bmp" hidden><input type="file" id="multiInput" accept="image/*" multiple hidden><input type="file" id="folderInput" webkitdirectory multiple hidden><input type="file" id="batchInput" accept=".csv,.xlsx" hidden>
 <dialog id="libraryDialog"><div class="modal-head"><div><h2>选择参考图</h2><p id="libraryTarget"></p></div><button class="close" data-close="libraryDialog">×</button></div><input id="librarySearch" placeholder="搜索素材文件名…"><div id="libraryGrid" class="asset-grid"></div><p>更多素材可在「参考图资产库」中扫描文件夹。</p></dialog>
 <dialog id="videoDialog"><div class="modal-head"><h2 id="videoTitle">视频预览</h2><button class="close" data-close="videoDialog">×</button></div><div id="videoBody"></div></dialog>
-<dialog id="logDialog"><div class="modal-head"><h2>任务详情</h2><button class="close" data-close="logDialog">×</button></div><pre id="logBody"></pre></dialog><div id="toast" role="status"></div><script src="/app.js"></script><script src="/agent.js"></script></body></html>
+<dialog id="logDialog"><div class="modal-head"><h2>任务详情</h2><button class="close" data-close="logDialog">×</button></div><pre id="logBody"></pre></dialog><div id="toast" role="status"></div><script src="/app.js"></script><script src="/agent.js"></script><script src="/director.js"></script></body></html>

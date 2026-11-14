@@ -3,7 +3,9 @@ import contextlib, csv, ctypes, hashlib, io, json, math, mimetypes, os, random, 
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import psutil
+import tempfile
 import studio_agent
+from film_director import Director
 
 ROOT=Path(__file__).resolve().parent
 H3 = Path(os.environ.get('CATFYUI_H3_ROOT') or ROOT / 'engines' / 'FreeVideo-H3')
@@ -63,7 +65,7 @@ def workflows():
 def default_asset_root():
     return str(ROOT / 'assets')
 def validate(raw,require_ready=True,asset_connection=None):
-    o={**DEFAULT,**raw}; models={m['id']:m for m in workflows()}
+    o={**DEFAULT,**raw}; o.pop('director_project',None); models={m['id']:m for m in workflows()}
     if o['workflow'] not in models:raise ValueError('未知工作流')
     if require_ready and not models[o['workflow']]['ready']:raise ValueError(models[o['workflow']]['detail'])
     o['prompt']=str(o['prompt']).strip()
@@ -227,7 +229,9 @@ def execute_wan(jid,o,folder):
     graph=wan_graph(o,folder); info=req('/object_info')
     absent=[n['class_type'] for n in graph.values() if n['class_type'] not in info]
     if absent:raise RuntimeError('ComfyUI 缺少节点：'+', '.join(absent))
-    result=req('/prompt',{'prompt':graph,'client_id':'video-studio-'+jid});pid=result['prompt_id'];write(folder/'comfy-prompt.json',result)
+    result=req('/prompt',{'prompt':graph,'client_id':'video-studio-'+jid});write(folder/'comfy-prompt.json',result)
+    return receive_wan(jid,folder,result['prompt_id'])
+def receive_wan(jid,folder,pid):
     start=time.time()
     while time.time()-start<8*3600:
         hist=req('/history/'+pid)
@@ -259,8 +263,13 @@ def worker():
         jid=r['id'];folder=ROOT/'jobs'/jid;folder.mkdir(exist_ok=True)
         try:
             if cancelled(jid):raise InterruptedError('已取消')
-            o=validate(json.loads(r['options']));write(folder/'options.json',o)
-            output=execute_wan(jid,o,folder) if o['workflow']=='wan22' else execute_h3(jid,o,folder)
+            options=json.loads(r['options'])
+            receipt=folder/'comfy-prompt.json'
+            if options.get('director_project') and options['workflow']=='wan22' and receipt.is_file():
+                output=receive_wan(jid,folder,read(receipt)['prompt_id'])
+            else:
+                o=validate(options);write(folder/'options.json',o)
+                output=execute_wan(jid,o,folder) if o['workflow']=='wan22' else execute_h3(jid,o,folder)
             if cancelled(jid):raise InterruptedError('已取消')
             update(jid,stage='全量解码检查',progress=.96)
             check=subprocess.run([str(FF),'-v','error','-xerror','-i',str(output),'-map','0:v:0','-f','null','-'],capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW)
@@ -349,6 +358,20 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/style.css':return self.file(ROOT/'style.css')
             if path=='/agent.js':return self.file(ROOT/'agent.js')
             if path=='/agent.css':return self.file(ROOT/'agent.css')
+            if path=='/director.js':return self.file(ROOT/'director.js')
+            if path=='/api/films':return self.reply(director().list())
+            if path.startswith('/media/films/'):
+                pid,kind,filename=path.removeprefix('/media/films/').split('/')
+                return self.file(director().artifact(pid,kind,filename),'download' in q)
+            if path.startswith('/api/films/') and path.endswith('/package'):
+                pid=path.removeprefix('/api/films/').removesuffix('/package')
+                with tempfile.TemporaryDirectory(prefix='catfy-film-') as folder:
+                    package=Path(folder)/f'CatfyUI-{pid}.zip'
+                    director().bundle(pid,package,'media' in q)
+                    return self.file(package,True)
+            if path.startswith('/api/films/'):
+                pid=path.removeprefix('/api/films/')
+                return self.reply(director().state(pid, q.get('revision',[None])[0]))
             if path=='/api/agent':return self.reply(agent().state())
             if path=='/api/state':
                 with db() as c:items=[dict(r) for r in c.execute('SELECT * FROM jobs ORDER BY created DESC,id DESC LIMIT 1000')]
@@ -393,6 +416,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(asset(dest))
             if length>8*1024**2:raise ValueError('请求过大')
             data=json.loads(self.rfile.read(length) or '{}')
+            if path=='/api/films/start':return self.reply(director().start(data))
+            if path.startswith('/api/films/'):
+                pid,action=path.removeprefix('/api/films/').split('/')
+                return self.reply(director().action(pid,action,data))
             if path.startswith('/api/agent/'):
                 return self.reply(agent().action(path.rsplit('/',1)[-1],data))
             if path=='/api/settings':
@@ -451,9 +478,16 @@ class Handler(BaseHTTPRequestHandler):
 def agent():
     return studio_agent.Agent(sys.modules[__name__])
 
+def director():
+    return Director(sys.modules[__name__])
+
 def main():
-    server=ThreadingHTTPServer(('127.0.0.1',PORT),Handler);initialize();threading.Thread(target=worker,daemon=True).start();print('AI 视频工作台 '+URL,flush=True)
+    server=ThreadingHTTPServer(('127.0.0.1',PORT),Handler);initialize();print('AI 视频工作台 '+URL,flush=True)
     agent().initialize()
+    director().initialize()
+    director().recover_jobs()
+    threading.Thread(target=worker,daemon=True).start()
+    threading.Thread(target=director().loop,daemon=True).start()
     threading.Thread(target=agent().loop,daemon=True).start()
     try:server.serve_forever()
     finally:stopped.set();server.server_close()
